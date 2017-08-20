@@ -22,9 +22,9 @@ namespace Pinger
 
         private void SosBeep()
         {
-            Point();
-            Point();
-            Point();
+            Dot();
+            Dot();
+            Dot();
             Pause();
 
             Dash();
@@ -32,26 +32,31 @@ namespace Pinger
             Dash();
             Pause();
 
-            Point();
-            Point();
-            Point();
+            Dot();
+            Dot();
+            Dot();
             Pause();
         }
+
+        const int ToneFreq = 1000; //Hz
+        const int PauseInterval = 50; //ms
+        const int DotInterval = 200; //ms
+        const int DashInterval = 2 * DotInterval; //ms
 
         private void Pause()
         {
-            Thread.Sleep(50);
+            Thread.Sleep(PauseInterval);
         }
 
-        private void Point()
+        private void Dot()
         {
-            Console.Beep(400, 150);
+            Console.Beep(ToneFreq, DotInterval);
             Pause();
         }
 
         private void Dash()
         {
-            Console.Beep(400, 150);
+            Console.Beep(ToneFreq, DashInterval);
             Pause();
         }
     }
