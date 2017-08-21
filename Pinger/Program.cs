@@ -102,48 +102,67 @@ namespace Pinger
             //var url = "10.11.0.30";
             var url = "Mcb.1bank.com.ua";
 
-            _log.Debug($"Pinging {url}...");
-
-            var ping = new Ping();
-            var result = ping.Send(url);
-
-            _log.Debug($"Result {result?.Status}");
-
-            return result?.Status == IPStatus.Success;
+            return PingByICMP(url);
         }
 
         private static bool PingFront()
         {
             var url = "http://mycredit.ua";
-            _log.Debug($"Pinging {url}...");
-
-            bool result = CustomPing(url);
-            var resMsg = result ? "succeed." : "FAILED!";
-
-            _log.Debug($"Pinging {resMsg}");
-
-            return result;
+            return CustomPing(url);
         }
 
+        private static bool PingByICMP(string url)
+        {
+            _log.Debug($"Pinging {url}...");
+
+            using (var ping = new Ping())
+            {
+                bool result;
+
+                try
+                {
+                    var pingReply = ping.Send(url);
+                    result = pingReply?.Status == IPStatus.Success;
+                }
+                catch (Exception ex)
+                {
+                    _log.Warn($"Ping caused an exception:\n", ex);
+                    result = false;
+                }
+
+                var resMsg = result ? "succeed." : "FAILED!";
+                _log.Debug($"Pinging result: {resMsg}");
+
+                return result;
+            }
+        }
 
         private static bool CustomPing(string url)
         {
+            _log.Debug($"Pinging {url}...");
+
             var uri = new Uri(url);
             var request = (HttpWebRequest)WebRequest.Create(uri);
             request.Timeout = 3000;
             request.AllowAutoRedirect = false; // find out if this site is up and don't follow a redirector
             request.Method = "HEAD";
 
+            bool result;
             try
             {
                 var response = request.GetResponse();
-                return true;
+                result = true;
             }
-            catch (WebException wex)
+            catch (WebException ex)
             {
-                _log.Error("Ping exception:\n", wex);
-                return false;
+                _log.Warn($"Ping caused an exception:\n", ex);
+                result = false;
             }
+
+            var resMsg = result ? "succeed." : "FAILED!";
+            _log.Debug($"Pinging result: {resMsg}");
+
+            return result;
         }
 
     }
