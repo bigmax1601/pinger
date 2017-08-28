@@ -27,7 +27,9 @@ namespace Pinger
         {
             _log.Info("Starting pinger...");
 
-            var task = Task.Run(() => Go(PingBack));
+            var taskBack = Task.Run(() => Go(PingBack));
+            Thread.Sleep(5000);
+            var taskFront = Task.Run(() => Go(PingFront));
 
             while (!(Console.KeyAvailable && Console.ReadKey(true).Key == ConsoleKey.Escape))
             {
@@ -36,7 +38,8 @@ namespace Pinger
 
             _log.Debug("Exiting.... _exitFlag = true");
             _exitFlag = true;
-            task.Wait();
+            taskBack.Wait();
+            taskFront.Wait();
 
             _log.Info("Pinger is finished.");
         }
@@ -100,15 +103,18 @@ namespace Pinger
         {
             //var url = "mycredit.ua";
             //var url = "10.11.0.30";
-            var url = "Mcb.1bank.com.ua";
+            var url = "mcb.1bank.com.ua";
 
             return PingByICMP(url);
         }
 
         private static bool PingFront()
         {
-            var url = "http://mycredit.ua";
-            return CustomPing(url);
+            //var url = "http://mycredit.ua";
+            //return CustomPing(url);
+
+            var url = "srv.mycredit.ua";
+            return PingByICMP(url);
         }
 
         private static bool PingByICMP(string url)
@@ -126,12 +132,12 @@ namespace Pinger
                 }
                 catch (Exception ex)
                 {
-                    _log.Warn($"Ping caused an exception:\n", ex);
+                    _log.Warn($"Ping {url} caused an exception:\n", ex);
                     result = false;
                 }
 
                 var resMsg = result ? "succeed." : "FAILED!";
-                _log.Debug($"Pinging result: {resMsg}");
+                _log.Debug($"Pinging {url} result: {resMsg}");
 
                 return result;
             }
@@ -155,12 +161,12 @@ namespace Pinger
             }
             catch (WebException ex)
             {
-                _log.Warn($"Ping caused an exception:\n", ex);
+                _log.Warn($"Ping {url} caused an exception:\n", ex);
                 result = false;
             }
 
             var resMsg = result ? "succeed." : "FAILED!";
-            _log.Debug($"Pinging result: {resMsg}");
+            _log.Debug($"Pinging {url} result: {resMsg}");
 
             return result;
         }
