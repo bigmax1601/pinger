@@ -11,12 +11,14 @@ namespace Pinger
 
         public void Notify(string message)
         {
-            _log.Warn(message);
-            Console.WriteLine(message);
+            //Send email or sms, etc
         }
 
         public void Alarm()
         {
+            Notify("Alarm!");
+            _log.Fatal("Alarm!");
+
             SosBeep();
         }
 

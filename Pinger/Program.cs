@@ -1,10 +1,12 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Net;
-using System.Net.NetworkInformation;
 using System.Threading;
 using System.Threading.Tasks;
 using log4net;
 using Pinger.Interfaces;
+using Pinger.Pingers;
 
 namespace Pinger
 {
@@ -14,7 +16,7 @@ namespace Pinger
         private const int TrySuccess = 5;
         private const int Interval = 10;
 
-        private static readonly ILog _log = LogManager.GetLogger(typeof(Program));
+        private static readonly ILog _log = LogManager.GetLogger("LOG");
 
         static Program()
         {
@@ -27,9 +29,11 @@ namespace Pinger
         {
             _log.Info("Starting pinger...");
 
-            var taskBack = Task.Run(() => Go(PingBack));
-            Thread.Sleep(5000);
-            var taskFront = Task.Run(() => Go(PingFront));
+            ServicePointManager.ServerCertificateValidationCallback += (sender, cert, chain, sslPolicyErrors) => true;
+            ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
+
+            var pingers = ObjectFactory.Container.GetAllInstances<PingerBase>();
+            var tasks = RunPingers(pingers);
 
             while (!(Console.KeyAvailable && Console.ReadKey(true).Key == ConsoleKey.Escape))
             {
@@ -38,15 +42,28 @@ namespace Pinger
 
             _log.Debug("Exiting.... _exitFlag = true");
             _exitFlag = true;
-            taskBack.Wait();
-            taskFront.Wait();
+
+            tasks.ForEach(task => task.Wait());
 
             _log.Info("Pinger is finished.");
         }
 
+        private static List<Task> RunPingers(IEnumerable<PingerBase> pingers)
+        {
+            var tasks = new List<Task>();
 
-        private delegate bool PingDelegate();
-        private static void Go(PingDelegate ping)
+            foreach (var pinger in pingers)
+            {
+                tasks.Add(Task.Run(() => Go(pinger)));
+                Thread.Sleep(Interval * 1000 / pingers.Count());
+            }
+
+            tasks.Add(Task.Run(() => ClearMemoryThread()));
+
+            return tasks;
+        }
+
+        private static void Go(PingerBase pinger)
         {
             INotifier notifier = new Notifier();
 
@@ -56,7 +73,7 @@ namespace Pinger
 
             do
             {
-                bool pingResult = ping();
+                bool pingResult = pinger.Ping();
 
                 if (allIsOk)
                 {
@@ -71,8 +88,8 @@ namespace Pinger
 
                     if (tryErrorsCounter > TryErrors)
                     {
-                        notifier.Notify("Alarm!");
                         notifier.Alarm();
+                        pinger.Alarm();
                         allIsOk = false;
                     }
                 }
@@ -89,7 +106,8 @@ namespace Pinger
 
                     if (trySuccessCounter > TrySuccess)
                     {
-                        notifier.Notify("All Ok!");
+                        //notifier.Notify("All Ok!");
+                        pinger.Alarm("All is Ok!");
                         allIsOk = true;
                     }
                 }
@@ -99,77 +117,31 @@ namespace Pinger
             _log.Debug("Go method detected _exitFlag == true.");
         }
 
-        private static bool PingBack()
-        {
-            //var url = "mycredit.ua";
-            //var url = "10.11.0.30";
-            var url = "mcb.1bank.com.ua";
 
-            return PingByICMP(url);
+        private static bool ClearMemory()
+        {
+            const string BaseUrl = "http://mcb.1bank.com.ua:9288";
+            const string UrlTotalMemory = BaseUrl + "/TotalMemory";
+            const string UrlClearMemory = BaseUrl + "/ClearMemory";
+
+            _log.Warn("Releasing memory by CG.Collect() call...");
+
+            var result1 = PingerHelper.WebClientRequest(UrlTotalMemory, out var response, "BACK: Get total memory =>");
+            var result2 = PingerHelper.WebClientRequest(UrlClearMemory, out response, "BACK: Release unused memory => ");
+
+            return result1 && result2;
         }
 
-        private static bool PingFront()
+        private static void ClearMemoryThread()
         {
-            //var url = "http://mycredit.ua";
-            //return CustomPing(url);
-
-            var url = "srv.mycredit.ua";
-            return PingByICMP(url);
-        }
-
-        private static bool PingByICMP(string url)
-        {
-            _log.Debug($"Pinging {url}...");
-
-            using (var ping = new Ping())
+            const int ClearMemoryPeriod = 120 * 1000; //2 minutes
+            do
             {
-                bool result;
+                ClearMemory();
+                Thread.Sleep(ClearMemoryPeriod);
+            } while (!_exitFlag);
 
-                try
-                {
-                    var pingReply = ping.Send(url);
-                    result = pingReply?.Status == IPStatus.Success;
-                }
-                catch (Exception ex)
-                {
-                    _log.Warn($"Ping {url} caused an exception:\n", ex);
-                    result = false;
-                }
-
-                var resMsg = result ? "succeed." : "FAILED!";
-                _log.Debug($"Pinging {url} result: {resMsg}");
-
-                return result;
-            }
+            _log.Debug("ClearMemoryThread method detected _exitFlag == true.");
         }
-
-        private static bool CustomPing(string url)
-        {
-            _log.Debug($"Pinging {url}...");
-
-            var uri = new Uri(url);
-            var request = (HttpWebRequest)WebRequest.Create(uri);
-            request.Timeout = 3000;
-            request.AllowAutoRedirect = false; // find out if this site is up and don't follow a redirector
-            request.Method = "HEAD";
-
-            bool result;
-            try
-            {
-                var response = request.GetResponse();
-                result = true;
-            }
-            catch (WebException ex)
-            {
-                _log.Warn($"Ping {url} caused an exception:\n", ex);
-                result = false;
-            }
-
-            var resMsg = result ? "succeed." : "FAILED!";
-            _log.Debug($"Pinging {url} result: {resMsg}");
-
-            return result;
-        }
-
     }
 }
